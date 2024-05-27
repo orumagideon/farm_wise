@@ -1,0 +1,391 @@
+{% extends 'base.html' %}
+
+{% block title %}
+Comments with Upvotes and Downvotes
+{% endblock title %}
+
+{% block style %}
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+    }
+
+    #comments {
+        margin-top: 20px;
+    }
+
+    .comment {
+        border: 1px solid #ddd;
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+
+    .vote-buttons {
+        display: flex;
+        align-items: center;
+    }
+
+    .vote-buttons button {
+        margin: 0 5px;
+    }
+
+    .reply-form {
+        margin-top: 10px;
+        display: none;
+    }
+
+    .replies {
+        margin-left: 20px;
+    }
+
+    .upvote-btn {
+        background-color: green;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+
+    .downvote-btn {
+        background-color: red;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+
+    .submit-btn {
+        background-color: green;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+
+    .delete-btn {
+        background-color: gray;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+
+    .edit-btn {
+        background-color: blue;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+
+    .notification {
+        margin: 10px 0;
+        padding: 10px;
+        border: 1px solid #ccc;
+        background-color: #f9f9f9;
+        display: none;
+    }
+
+    .show-replies-btn {
+        background-color: #ddd;
+        color: black;
+        border: none;
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+
+    .collapsed {
+        max-height: 50px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .collapsed::after {
+        content: 'Show More';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(to top, white, transparent);
+        text-align: center;
+        cursor: pointer;
+        padding: 5px 0;
+    }
+
+    .expanded::after {
+        content: 'Show Less';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(to top, white, transparent);
+        text-align: center;
+        cursor: pointer;
+        padding: 5px 0;
+    }
+</style>
+{% endblock style %}
+
+{% block body %}
+<h1>Leave a Comment</h1>
+<form id="commentForm">
+    <textarea id="commentText" rows="4" cols="50" placeholder="Write your comment here..."></textarea><br>
+    <button type="submit" class="submit-btn">Submit</button>
+</form>
+<div id="comments">
+    <h2>Comments</h2>
+</div>
+
+<div class="notification" id="notification"></div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', (event) => {
+        const commentForm = document.getElementById('commentForm');
+        const commentText = document.getElementById('commentText');
+        const commentsDiv = document.getElementById('comments');
+        const notificationDiv = document.getElementById('notification');
+        const localStorageKey = 'nested_comments_app';
+
+        function showNotification(message) {
+            notificationDiv.textContent = message;
+            notificationDiv.style.display = 'block';
+            setTimeout(() => {
+                notificationDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function createCommentElement(commentObj, parentIndex = null) {
+            const { comment, upvotes, downvotes, replies, userVote } = commentObj;
+            const commentDiv = document.createElement('div');
+            commentDiv.className = 'comment';
+
+            const commentTextDiv = document.createElement('div');
+            commentTextDiv.className = comment.length > 100 ? 'collapsed' : '';
+            commentTextDiv.textContent = comment;
+
+            commentTextDiv.addEventListener('click', () => {
+                if (commentTextDiv.classList.contains('collapsed')) {
+                    commentTextDiv.classList.remove('collapsed');
+                    commentTextDiv.classList.add('expanded');
+                } else if (commentTextDiv.classList.contains('expanded')) {
+                    commentTextDiv.classList.remove('expanded');
+                    commentTextDiv.classList.add('collapsed');
+                }
+            });
+
+            const voteButtonsDiv = document.createElement('div');
+            voteButtonsDiv.className = 'vote-buttons';
+
+            const upvoteBtn = document.createElement('button');
+            upvoteBtn.className = 'upvote-btn';
+            upvoteBtn.textContent = `Upvote (${upvotes})`;
+            upvoteBtn.addEventListener('click', () => {
+                updateCommentVotes(parentIndex, comment, 'upvote');
+            });
+
+            const downvoteBtn = document.createElement('button');
+            downvoteBtn.className = 'downvote-btn';
+            downvoteBtn.textContent = `Downvote (${downvotes})`;
+            downvoteBtn.addEventListener('click', () => {
+                updateCommentVotes(parentIndex, comment, 'downvote');
+            });
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'edit-btn';
+            editBtn.textContent = 'Edit';
+            editBtn.addEventListener('click', () => {
+                const newComment = prompt('Edit your comment:', comment);
+                if (newComment) {
+                    editComment(parentIndex, comment, newComment);
+                }
+            });
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.addEventListener('click', () => {
+                if (confirm('Are you sure you want to delete this comment?')) {
+                    deleteComment(parentIndex, comment);
+                }
+            });
+
+            const replyBtn = document.createElement('button');
+            replyBtn.className = 'submit-btn';
+            replyBtn.textContent = 'Reply';
+            replyBtn.addEventListener('click', () => {
+                const replyForm = commentDiv.querySelector('.reply-form');
+                if (replyForm.style.display === 'none') {
+                    replyForm.style.display = 'block';
+                } else {
+                    replyForm.style.display = 'none';
+                }
+            });
+
+            const replyFormDiv = document.createElement('div');
+            replyFormDiv.className = 'reply-form';
+
+            const replyTextarea = document.createElement('textarea');
+            replyTextarea.rows = 2;
+            replyTextarea.cols = 50;
+            replyTextarea.placeholder = 'Write your reply here...';
+
+            const replySubmitBtn = document.createElement('button');
+            replySubmitBtn.className = 'submit-btn';
+            replySubmitBtn.textContent = 'Submit';
+            replySubmitBtn.addEventListener('click', () => {
+                const reply = replyTextarea.value.trim();
+                if (reply) {
+                    saveReply(parentIndex, comment, reply);
+                    loadComments();
+                    replyTextarea.value = '';
+                    replyFormDiv.style.display = 'none';
+                }
+            });
+
+            replyFormDiv.appendChild(replyTextarea);
+            replyFormDiv.appendChild(replySubmitBtn);
+
+            voteButtonsDiv.appendChild(upvoteBtn);
+            voteButtonsDiv.appendChild(downvoteBtn);
+            voteButtonsDiv.appendChild(editBtn);
+            voteButtonsDiv.appendChild(deleteBtn);
+            voteButtonsDiv.appendChild(replyBtn);
+
+            commentDiv.appendChild(commentTextDiv);
+            commentDiv.appendChild(voteButtonsDiv);
+            commentDiv.appendChild(replyFormDiv);
+
+            const repliesDiv = document.createElement('div');
+            repliesDiv.className = 'replies';
+
+            if (replies && replies.length > 0) {
+                const showRepliesBtn = document.createElement('button');
+                showRepliesBtn.className = 'show-replies-btn';
+                showRepliesBtn.textContent = `Show Replies (${replies.length})`;
+                showRepliesBtn.addEventListener('click', () => {
+                    if (repliesDiv.style.display === 'none') {
+                        repliesDiv.style.display = 'block';
+                        showRepliesBtn.textContent = `Hide Replies (${replies.length})`;
+                    } else {
+                        repliesDiv.style.display = 'none';
+                        showRepliesBtn.textContent = `Show Replies (${replies.length})`;
+                    }
+                });
+                commentDiv.appendChild(showRepliesBtn);
+            }
+
+            replies.forEach((reply, replyIndex) => {
+                const replyElement = createCommentElement(reply, `${parentIndex}-${replyIndex}`);
+                repliesDiv.appendChild(replyElement);
+            });
+
+            repliesDiv.style.display = 'none';
+            commentDiv.appendChild(repliesDiv);
+
+            return commentDiv;
+        }
+
+        function loadComments() {
+            commentsDiv.innerHTML = '<h2>Comments</h2>';
+            const comments = JSON.parse(localStorage.getItem(localStorageKey)) || [];
+            comments.forEach((commentObj, index) => {
+                const commentElement = createCommentElement(commentObj, index);
+                commentsDiv.appendChild(commentElement);
+            });
+        }
+
+        function saveComment(comment) {
+            const comments = JSON.parse(localStorage.getItem(localStorageKey)) || [];
+            comments.push({ comment, upvotes: 0, downvotes: 0, replies: [], userVote: null });
+            localStorage.setItem(localStorageKey, JSON.stringify(comments));
+            showNotification('Comment added successfully!');
+        }
+
+        function updateCommentVotes(parentIndex, comment, type) {
+            const comments = JSON.parse(localStorage.getItem(localStorageKey)) || [];
+            const commentObj = comments[parentIndex];
+            const targetComment = commentObj.replies.find(c => c.comment === comment) || commentObj;
+            if (type === 'upvote') {
+                if (targetComment.userVote === 'upvote') {
+                    targetComment.upvotes -= 1;
+                    targetComment.userVote = null;
+                } else {
+                    if (targetComment.userVote === 'downvote') {
+                        targetComment.downvotes -= 1;
+                    }
+                    targetComment.upvotes += 1;
+                    targetComment.userVote = 'upvote';
+                }
+            } else if (type === 'downvote') {
+                if (targetComment.userVote === 'downvote') {
+                    targetComment.downvotes -= 1;
+                    targetComment.userVote = null;
+                } else {
+                    if (targetComment.userVote === 'upvote') {
+                        targetComment.upvotes -= 1;
+                    }
+                    targetComment.downvotes += 1;
+                    targetComment.userVote = 'downvote';
+                }
+            }
+            localStorage.setItem(localStorageKey, JSON.stringify(comments));
+            loadComments();
+            showNotification(`You ${type === 'upvote' ? 'upvoted' : 'downvoted'} a comment!`);
+        }
+
+        function deleteComment(parentIndex, comment) {
+            const comments = JSON.parse(localStorage.getItem(localStorageKey)) || [];
+            const commentObj = comments[parentIndex];
+            if (commentObj.comment === comment) {
+                comments.splice(parentIndex, 1);
+            } else {
+                const replyIndex = commentObj.replies.findIndex(c => c.comment === comment);
+                if (replyIndex > -1) {
+                    commentObj.replies.splice(replyIndex, 1);
+                }
+            }
+            localStorage.setItem(localStorageKey, JSON.stringify(comments));
+            loadComments();
+            showNotification('Comment deleted successfully!');
+        }
+
+        function editComment(parentIndex, oldComment, newComment) {
+            const comments = JSON.parse(localStorage.getItem(localStorageKey)) || [];
+            const commentObj = comments[parentIndex];
+            if (commentObj.comment === oldComment) {
+                commentObj.comment = newComment;
+            } else {
+                const targetComment = commentObj.replies.find(c => c.comment === oldComment);
+                if (targetComment) {
+                    targetComment.comment = newComment;
+                }
+            }
+            localStorage.setItem(localStorageKey, JSON.stringify(comments));
+            loadComments();
+            showNotification('Comment edited successfully!');
+        }
+
+        function saveReply(parentIndex, comment, reply) {
+            const comments = JSON.parse(localStorage.getItem(localStorageKey)) || [];
+            const commentObj = comments[parentIndex];
+            const targetComment = commentObj.replies.find(c => c.comment === comment) || commentObj;
+            targetComment.replies.push({ comment: reply, upvotes: 0, downvotes: 0, replies: [], userVote: null });
+            localStorage.setItem(localStorageKey, JSON.stringify(comments));
+            showNotification('Reply added successfully!');
+        }
+
+        commentForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const comment = commentText.value.trim();
+            if (comment) {
+                saveComment(comment);
+                loadComments();
+                commentText.value = '';
+            }
+        });
+
+        loadComments();
+    });
+</script>
+{% endblock body %}
