@@ -48,7 +48,7 @@ INSERT INTO `addagroproducts` (`username`, `email`, `pid`, `productname`, `produ
 -- --------------------------------------------------------
 
 --
--- Table structure for table `farming`
+-- Table structure for `farming`
 --
 
 CREATE TABLE `farming` (
